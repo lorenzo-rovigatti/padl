@@ -7,31 +7,58 @@ using std::string;
 using std::cout;
 using std::endl;
 
+string read_(tcp::socket &socket) {
+	asio::streambuf buf;
+	asio::read_until(socket, buf, "\n");
+	string data = asio::buffer_cast<const char*>(buf.data());
+	// remove the last character, which is an \n
+	data.pop_back();
+	return data;
+}
+
+void send_(tcp::socket &socket, const string &message) {
+	asio::write(socket, asio::buffer(message + "\n"));
+}
+
 int main() {
-     asio::io_service io_service;
-     //socket creation
-     tcp::socket socket(io_service);
-     //connection
-     socket.connect( tcp::endpoint( asio::ip::address::from_string("127.0.0.1"), 1234 ));
-     // request/message from client
-     const string msg = "Hello from Client!\n";
-     asio::error_code error;
-     asio::write( socket, asio::buffer(msg), error );
-     if( !error ) {
-        cout << "Client sent hello message!" << endl;
-     }
-     else {
-        cout << "send failed: " << error.message() << endl;
-     }
-     // getting response from server
-     asio::streambuf receive_buffer;
-     asio::read(socket, receive_buffer, asio::transfer_all(), error);
-     if( error && error != asio::error::eof ) {
-       cout << "receive failed: " << error.message() << endl;
-     }
-     else {
-       const char* data = asio::buffer_cast<const char*>(receive_buffer.data());
-       cout << data << endl;
-     }
-     return 0;
+	std::string raw_ip_address = "127.0.0.1";
+	unsigned short port_num = 1234;
+	asio::error_code error;
+
+	asio::ip::address ip_address = asio::ip::address::from_string(raw_ip_address, error);
+	if(error.value() != 0) {
+		// Provided IP address is invalid. Breaking execution.
+		std::cout
+				<< "Failed to parse the IP address. Error code = "
+				<< error.value() << ". Message: " << error.message();
+		return error.value();
+	}
+
+	tcp::endpoint ep(asio::ip::address::from_string(raw_ip_address), port_num);
+
+	asio::io_service io_service;
+	//socket creation
+	tcp::socket socket(io_service);
+	//connection
+	socket.connect(ep, error);
+	if(error.value() != 0) {
+		// Failed to open the socket.
+		std::cout
+				<< "Failed to open the socket! Error code = "
+				<< error.value() << ". Message: " << error.message();
+		return error.value();
+	}
+
+	while(true) {
+		string msg;
+		std::getline(std::cin, msg);
+		send_(socket, msg);
+
+		// getting response from server
+		asio::streambuf receive_buffer;
+		string message = read_(socket);
+		cout << "Message from server: " << message << endl;
+	}
+
+	return 0;
 }
