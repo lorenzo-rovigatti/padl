@@ -7,7 +7,7 @@ using std::string;
 using std::cout;
 using std::endl;
 
-string read_(tcp::socket &socket) {
+string read_from_socket(tcp::socket &socket) {
 	asio::streambuf buf;
 	asio::read_until(socket, buf, "\n");
 	string data = asio::buffer_cast<const char*>(buf.data());
@@ -16,7 +16,7 @@ string read_(tcp::socket &socket) {
 	return data;
 }
 
-void send_(tcp::socket &socket, const string &message) {
+void write_to_socket(tcp::socket &socket, const string &message) {
 	asio::write(socket, asio::buffer(message + "\n"));
 }
 
@@ -34,10 +34,10 @@ int main() {
 
 	while(true) {
 		//read operation
-		string message = read_(socket_);
+		string message = read_from_socket(socket_);
 		cout << "Message from client: " << message << endl;
 		//write operation
-		send_(socket_, "Message '" + message + "' received");
+		write_to_socket(socket_, "Message '" + message + "' received");
 	}
 
 	return 0;
