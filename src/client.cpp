@@ -78,7 +78,7 @@ string TCPClient::read() {
 void TCPClient::write(const string &message) {
 	_last_write_time = _time();
 
-	asio::write(_socket, asio::buffer(message + "\n"));
+	asio::write(_socket, asio::buffer(message + "\r\n"));
 }
 
 uint64_t TCPClient::last_write_time() {
@@ -89,17 +89,23 @@ uint64_t TCPClient::last_read_time() {
 	return _last_read_time - _creation_time;
 }
 
-void parse_message(const string &message) {
+std::vector<int> parse_message(const string &message) {
+	auto spl = utils::split(message, ",");
+	std::vector<int> results(spl.size() / 3);
+	for(int i = 0; i < spl.size() / 3; i++) {
+		results[i] = utils::lexical_cast<int>(spl[2 * i + 2]);
+	}
 
+	return results;
 }
 
 int main(int argc, char *argv[]) {
 	if(argc < 3) {
-		std::cerr << "Usage is " << argv[0] << " ip port [sleep in ms]" << std::endl;
+		std::cerr << "Usage is " << argv[0] << " ip port [sleep in ms]" << endl;
 		exit(1);
 	}
 
-	std::string raw_ip_address(argv[1]);
+	string raw_ip_address(argv[1]);
 	unsigned short port_num = std::atoi(argv[2]);
 
 	auto sleep_duration = std::chrono::milliseconds(0);
@@ -112,15 +118,17 @@ int main(int argc, char *argv[]) {
 
 	while(true) {
 		string msg;
-		std::getline(std::cin, msg);
-		client.write(msg);
+		client.write("MS");
 
 		// getting response from server
 		asio::streambuf receive_buffer;
 		string message = client.read();
-		cout << "WRITE: " << client.last_write_time() << endl;
-		cout << "READ: " << client.last_read_time() << endl;
-		cout << "MESSAGE: " << message << endl;
+		auto sensor_values = parse_message(message);
+		cout << client.last_write_time() << " " << client.last_read_time();
+		for(auto &value : sensor_values) {
+			cout << " " << value;
+		}
+		cout << endl;
 
 		std::this_thread::sleep_for(sleep_duration);
 	}
