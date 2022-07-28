@@ -4,6 +4,8 @@
 #include <iomanip>
 #include <thread>
 #include <asio.hpp>
+#include <RS-232/rs232.h>
+#include <tclap/CmdLine.h>
 
 #include "strings.h"
 
@@ -111,40 +113,55 @@ std::string current_time() {
 }
 
 int main(int argc, char *argv[]) {
-	if(argc < 3) {
-		std::cerr << "Usage is " << argv[0] << " ip port [sleep in ms]" << std::endl;
-		exit(1);
-	}
+	try {
+		TCLAP::CmdLine cmd("PADL - Polling Asincrono di DL", ' ', "0.1");
 
-	std::string raw_ip_address(argv[1]);
-	unsigned short port_num = std::atoi(argv[2]);
+		TCLAP::UnlabeledValueArg<std::string> ip_arg("ip", "The IP address of the DL device", true, "127.0.0.1", "an IP address (e.g. 192.168.0.1)");
+		TCLAP::UnlabeledValueArg<int> port_arg("port", "The TCP port of the DL device", true, 6000, "a port number (e.g. 6000)");
 
-	auto sleep_duration = std::chrono::milliseconds(0);
-	if(argc > 3) {
-		sleep_duration = std::chrono::milliseconds(std::atoi(argv[3]));
-	}
+		TCLAP::ValueArg<int> ms_arg("s", "sleep", "Sleeping time between sendings (in milliseconds)", false, 0, "milliseconds");
 
-	TCPClient client(raw_ip_address, port_num);
-	client.connect();
+		cmd.add(ip_arg);
+		cmd.add(port_arg);
+		cmd.add(ms_arg);
 
-	while(true) {
-		std::string msg;
-		client.write("MS");
+		cmd.parse(argc, argv);
 
-		// getting response from server
-		asio::streambuf receive_buffer;
-		std::string message = client.read();
-		auto sensor_values = parse_message(message);
-		uint64_t average_time = (client.last_write_time() + client.last_read_time()) / 2;
+		std::string raw_ip_address(ip_arg.getValue());
+		unsigned short port_num = port_arg.getValue();
 
-		std::cout << average_time << " " << current_time();
+		auto sleep_duration = std::chrono::milliseconds(ms_arg.getValue());
 
-		for(auto &value : sensor_values) {
-			std::cout << " " << value;
+		TCPClient client(raw_ip_address, port_num);
+		client.connect();
+
+		while(true) {
+			std::string msg;
+			client.write("MS");
+
+			// getting response from server
+			asio::streambuf receive_buffer;
+			std::string message = client.read();
+			auto sensor_values = parse_message(message);
+			uint64_t average_time = (client.last_write_time() + client.last_read_time()) / 2;
+
+			std::stringstream ss;
+
+			ss << average_time << " " << current_time();
+
+			for(auto &value : sensor_values) {
+				ss << " " << value;
+			}
+			ss << std::endl;
+
+			std::cout << ss.str();
+
+			std::this_thread::sleep_for(sleep_duration);
 		}
-		std::cout << std::endl;
 
-		std::this_thread::sleep_for(sleep_duration);
+	}
+	catch(TCLAP::ArgException &e) {
+		std::cerr << "ERROR: " << e.error() << " for arg " << e.argId() << std::endl;
 	}
 
 	return 0;
