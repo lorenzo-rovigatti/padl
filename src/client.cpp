@@ -121,9 +121,16 @@ int main(int argc, char *argv[]) {
 
 		TCLAP::ValueArg<int> ms_arg("s", "sleep", "Sleeping time between sendings (in milliseconds)", false, 0, "milliseconds");
 
+		TCLAP::ValueArg<int> com_port_arg("p", "serial-port", "The COM port number of the serial port to which the output will be printed", false, -1, "COM port number (e.g. 0)");
+		TCLAP::ValueArg<int> baud_rate_arg("b", "baudrate", "Baudrate of the serial connection, defaults to 9600", false, 9600, "bauds");
+		TCLAP::ValueArg<std::string> mode_arg("", "mode", "Mode of the serial connection, defaults to 8N1", false, "8N1", "serial mode");
+
 		cmd.add(ip_arg);
 		cmd.add(port_arg);
 		cmd.add(ms_arg);
+		cmd.add(com_port_arg);
+		cmd.add(baud_rate_arg);
+		cmd.add(mode_arg);
 
 		cmd.parse(argc, argv);
 
@@ -131,6 +138,16 @@ int main(int argc, char *argv[]) {
 		unsigned short port_num = port_arg.getValue();
 
 		auto sleep_duration = std::chrono::milliseconds(ms_arg.getValue());
+
+		bool write_com = false;
+		int com_port_number = com_port_arg.getValue();
+		if(com_port_number >= 0) {
+			write_com = true;
+			int baud_rate = baud_rate_arg.getValue();
+			std::string mode = mode_arg.getValue();
+			// open the COM port
+			RS232_OpenComport(com_port_number, baud_rate, mode.c_str(), 0);
+		}
 
 		TCPClient client(raw_ip_address, port_num);
 		client.connect();
@@ -153,10 +170,20 @@ int main(int argc, char *argv[]) {
 				ss << " " << value;
 			}
 			ss << std::endl;
+			std::string output = ss.str();
 
-			std::cout << ss.str();
+			if(write_com) {
+				RS232_cputs(com_port_number, output.c_str());
+			}
+			else {
+				std::cout << output;
+			}
 
 			std::this_thread::sleep_for(sleep_duration);
+		}
+
+		if(write_com) {
+			RS232_CloseComport(com_port_number);
 		}
 
 	}
