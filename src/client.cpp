@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <ctime>
+#include <cstdlib>
 #include <iomanip>
 #include <thread>
 #include <asio.hpp>
@@ -70,13 +71,20 @@ void TCPClient::connect() {
 
 void TCPClient::connect_dummy() {
 	_is_dummy = true;
+
+	std::srand(std::time(NULL));
 }
 
 std::string TCPClient::read() {
 	_last_read_time = _time();
 
 	if(_is_dummy) {
-		return "1.2,1.2,1.2,2.3,2.3,2.3";
+		std::stringstream ss;
+		ss << std::rand() % 1024;
+		for(int i = 0; i < 8; i++) {
+			ss << "," << std::rand() % 1024;
+		}
+		return ss.str();
 	}
 
 	asio::streambuf buf;
