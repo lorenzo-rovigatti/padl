@@ -17,6 +17,7 @@ public:
 	TCPClient(std::string raw_ip_address, unsigned short port);
 
 	void connect();
+	void connect_dummy();
 	std::string read();
 	void write(const std::string &message);
 
@@ -31,6 +32,7 @@ private:
 	asio::io_service _io_service;
 	tcp::endpoint _endpoint;
 	tcp::socket _socket;
+	bool _is_dummy = false;
 };
 
 TCPClient::TCPClient(std::string raw_ip_address, unsigned short port) : _socket(_io_service) {
@@ -66,8 +68,16 @@ void TCPClient::connect() {
 	}
 }
 
+void TCPClient::connect_dummy() {
+	_is_dummy = true;
+}
+
 std::string TCPClient::read() {
 	_last_read_time = _time();
+
+	if(_is_dummy) {
+		return "1.2,1.2,1.2,2.3,2.3,2.3";
+	}
 
 	asio::streambuf buf;
 	asio::read_until(_socket, buf, "\n");
@@ -80,7 +90,9 @@ std::string TCPClient::read() {
 void TCPClient::write(const std::string &message) {
 	_last_write_time = _time();
 
-	asio::write(_socket, asio::buffer(message + "\r\n"));
+	if(!_is_dummy) {
+		asio::write(_socket, asio::buffer(message + "\r\n"));
+	}
 }
 
 uint64_t TCPClient::last_write_time() {
@@ -119,6 +131,8 @@ int main(int argc, char *argv[]) {
 		TCLAP::UnlabeledValueArg<std::string> ip_arg("ip", "The IP address of the DL device", true, "127.0.0.1", "an IP address (e.g. 192.168.0.1)");
 		TCLAP::UnlabeledValueArg<int> port_arg("port", "The TCP port of the DL device", true, 6000, "a port number (e.g. 6000)");
 
+		TCLAP::SwitchArg dummy_arg("d", "dummy", "Generate synthetic data", false);
+
 		TCLAP::ValueArg<int> ms_arg("s", "sleep", "Sleeping time between sendings (in milliseconds)", false, 0, "milliseconds");
 
 		TCLAP::ValueArg<int> com_port_arg("p", "serial-port", "The COM port number of the serial port to which the output will be printed", false, -1, "COM port number (e.g. 0)");
@@ -127,6 +141,7 @@ int main(int argc, char *argv[]) {
 
 		cmd.add(ip_arg);
 		cmd.add(port_arg);
+		cmd.add(dummy_arg);
 		cmd.add(ms_arg);
 		cmd.add(com_port_arg);
 		cmd.add(baud_rate_arg);
@@ -136,6 +151,7 @@ int main(int argc, char *argv[]) {
 
 		std::string raw_ip_address(ip_arg.getValue());
 		unsigned short port_num = port_arg.getValue();
+		bool dummy = dummy_arg.getValue();
 
 		auto sleep_duration = std::chrono::milliseconds(ms_arg.getValue());
 
@@ -150,7 +166,13 @@ int main(int argc, char *argv[]) {
 		}
 
 		TCPClient client(raw_ip_address, port_num);
-		client.connect();
+
+		if(dummy) {
+			client.connect_dummy();
+		}
+		else {
+			client.connect();
+		}
 
 		while(true) {
 			std::string msg;
@@ -162,21 +184,30 @@ int main(int argc, char *argv[]) {
 			auto sensor_values = parse_message(message);
 			uint64_t average_time = (client.last_write_time() + client.last_read_time()) / 2;
 
-			std::stringstream ss;
-
-			ss << average_time << " " << current_time();
-
-			for(auto &value : sensor_values) {
-				ss << " " << value;
-			}
-			ss << std::endl;
-			std::string output = ss.str();
-
 			if(write_com) {
+				uint n_values = sensor_values.size();
+
+				std::stringstream ss;
+				ss << n_values << " ";
+
+				for(auto &value : sensor_values) {
+					ss << " " << value;
+				}
+				ss << '\n';
+				std::string output = ss.str();
+
 				RS232_cputs(com_port_number, output.c_str());
 			}
 			else {
-				std::cout << output;
+				std::stringstream ss;
+				ss << average_time << " " << current_time();
+
+				for(auto &value : sensor_values) {
+					ss << " " << value;
+				}
+				std::string output = ss.str();
+
+				std::cout << output << std::endl;
 			}
 
 			std::this_thread::sleep_for(sleep_duration);
